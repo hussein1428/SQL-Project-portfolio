@@ -1,0 +1,154 @@
+-------COVID19 DATA ANALYSIS----------
+
+create schema dba
+create table dba.covidvacinations
+(iso_code varchar, continent varchar,location varchar, date date, new_tests int, total_tests int, 
+ total_tests_per_thousand decimal, new_tests_per_thousand decimal, new_tests_smoothed int, 
+ new_tests_smoothed_per_thousand decimal, positive_rate decimal, tests_per_case decimal, tests_units varchar, 
+ total_vaccinations bigint, people_vaccinated bigint, people_fully_vaccinated bigint, total_boosters int, 
+ new_vaccinations int, new_vaccinations_smoothed int, total_vaccinations_per_hundred decimal, 
+ people_vaccinated_per_hundred decimal, people_fully_vaccinated_per_hundred decimal, total_boosters_per_hundred decimal, 
+ new_vaccinations_smoothed_per_million int, new_people_vaccinated_smoothed int, 
+ new_people_vaccinated_smoothed_per_hundred decimal, stringency_index decimal, population bigint, population_density decimal, 
+ median_age decimal, aged_65_older decimal, aged_70_older decimal, gdp_per_capita decimal, extreme_poverty decimal, cardiovasc_death_rate decimal, 
+ diabetes_prevalence decimal, female_smokers decimal, male_smokers decimal, handwashing_facilities decimal, 
+ hospital_beds_per_thousand decimal, life_expectancy decimal, human_development_index decimal, 
+ excess_mortality_cumulative_absolute decimal, excess_mortality_cumulative decimal, excess_mortality decimal, 
+ excess_mortality_cumulative_per_million decimal)
+ 
+select * from dba.covidvacinations
+
+copy dba.covidvacinations from 
+'C:\Users\USER\Desktop\My Utiva Course\Project portfolio\covidvaccinations.csv' with csv header
+
+create table dba.coviddeath
+(iso_code varchar, continent varchar, location varchar, population bigint, date date, 
+ total_cases bigint, new_cases bigint, new_cases_smoothed decimal, total_deaths bigint, 
+ new_deaths bigint, new_deaths_smoothed decimal, total_cases_per_million decimal, 
+ new_cases_per_million decimal, new_cases_smoothed_per_million decimal, 
+ total_deaths_per_million decimal, new_deaths_per_million decimal, new_deaths_smoothed_per_million decimal, 
+ reproduction_rate decimal, icu_patients bigint, icu_patients_per_million decimal, hosp_patients bigint, 
+ hosp_patients_per_million decimal, weekly_icu_admissions bigint, weekly_icu_admissions_per_million decimal, 
+ weekly_hosp_admissions bigint, weekly_hosp_admissions_per_million decimal )
+ 
+select * from dba.coviddeath
+
+copy dba.coviddeath from 
+'C:\Users\USER\Desktop\My Utiva Course\Project portfolio\coviddeath.csv' with csv header
+
+select location, date, total_cases, new_cases, total_deaths, population
+from dba.coviddeath order by 1,2
+
+select *
+from dba.coviddeath order by 1,2
+
+---------------TOTAL CASES VS TOTAL DEATH--------------------
+----Likelihood of dying if you contract covid19 in your country--------
+
+select location, date, total_cases, total_deaths, 
+cast((total_deaths)*100 as decimal)/total_cases as DeathPercentage
+from dba.coviddeath 
+where location like '%States%' and total_deaths is not null
+order by 1,2
+
+select location, date, total_cases, total_deaths, 
+cast((total_deaths)*100 as decimal)/total_cases as DeathPercentage
+from dba.coviddeath 
+where location = 'Nigeria' and total_deaths is not null 
+order by 1,2
+
+--- TOTAL CASES VS POPULATION----
+--Percentage of Population that got covid19----
+
+select location, date, population, 
+cast((total_cases)*100 as decimal)/population as percentagepopulationinfected
+from dba.coviddeath 
+order by 1,2
+
+-----COUNTRIES WITH HIGHEST INFECTION RATE COMPARED TO POPULATION---
+
+select location, population, max(total_cases) as highestinfectioncount, 
+max(cast((total_cases)*100 as decimal)/population) as percentagepopulationinfected
+from dba.coviddeath
+where total_cases is not null and population is not null
+group by location, population
+order by percentagepopulationinfected desc
+
+--- COUNTRIES WITH HIGHEST DEATH COUNT PER POPULATION---
+
+select location, max(total_deaths) as totaldeathcount
+from dba.coviddeath
+where continent is not null and total_deaths is not null
+group by location
+order by totaldeathcount desc
+
+---- HIGHEST DEATH COUNT BY CONTINENT----
+
+select continent, max(total_deaths) as totaldeathcount
+from dba.coviddeath
+where continent is not null
+group by continent
+order by totaldeathcount desc
+
+-------GLOBAL NUMBERS-------
+
+select date, sum(new_cases) as total_cases, sum(cast(new_deaths as int)) as total_deaths, 
+sum(cast(new_deaths as int))/sum(new_cases) * 100 as deathpercentage
+from dba.coviddeath
+where continent is not null and new_cases is not null
+group by date
+order by 1,2
+
+select sum(new_cases) as total_cases, sum(cast(new_deaths as int)) as total_deaths, 
+sum(cast(new_deaths as int))/sum(new_cases) * 100 as deathpercentage
+from dba.coviddeath
+where continent is not null
+order by 1,2
+
+------TOTAL POPULATION VS VACCINATION-----
+
+-----USE CTE--------
+with popvsvac (continent,location, date, population, new_vaccinations,rollingpeoplevaccinated)
+as (
+select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+sum(cast(vac.new_vaccinations as int)) over(partition by dea.location order by dea.location, dea.date)
+as rollingpeoplevaccinated
+from dba.coviddeath dea
+join dba.covidvacinations vac
+on dea.location = vac.location
+and dea.date = vac.date
+where dea.continent is not null
+---order by 2,3
+)
+select *, (cast(rollingpeoplevaccinated as numeric)*100/population)
+from popvsvac
+
+-----TEMP Table-------
+create table dba.percentagepopulationvaccinate
+(continent varchar(255), location varchar(255), date date, population numeric,
+new_vaccinations numeric, rollingpeoplevaccinated numeric)
+insert into dba.percentagepopulationvaccinate
+select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+sum(cast(vac.new_vaccinations as int)) over(partition by dea.location order by dea.location, dea.date)
+as rollingpeoplevaccinated
+from dba.coviddeath dea
+join dba.covidvacinations vac
+on dea.location = vac.location
+and dea.date = vac.date
+----where dea.continent is not null
+---order by 2,3
+select *, (cast(rollingpeoplevaccinated as numeric)*100/population)
+from dba.percentagepopulationvaccinate
+
+-------CREATING VIEW TO STORE DATA FOR LATER------
+
+create view dba.percentagepopulationvaccinate2 as
+select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+sum(cast(vac.new_vaccinations as int)) over(partition by dea.location order by dea.location, dea.date)
+as rollingpeoplevaccinated
+from dba.coviddeath dea
+join dba.covidvacinations vac
+on dea.location = vac.location
+and dea.date = vac.date
+where dea.continent is not null
+---order by 2,3
